@@ -183,6 +183,10 @@ impl Handler for App {
         let pty = Pty::new()?;
         cmd.uid(99).gid(99)
             .arg0("bash")
+            .env("HOME", "/")
+            .env_remove("container")
+            .env("HOSTNAME", "sshx")
+            .env_remove("RUST_LOG")
             .env("FLAG", "WGCTF{1_l0v3_77h_pr0t0}")
             .spawn(&pty.pts()?)?;
         let (mut read, write) = pty.into_split();
