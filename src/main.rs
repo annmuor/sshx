@@ -93,7 +93,10 @@ impl Handler for App {
             Some((secret, provided)) => {
                 let right_key = totp_lite::totp_custom::<Sha512>(3600, 10, secret.as_bytes(), 0);
                 match right_key.eq(provided) {
-                    true => Auth::Accept,
+                    true => {
+                        info!("Accepted TOTP auth for {user}");
+                        Auth::Accept
+                    }
                     false => {
                         if provided.len() != 10 {
                             Auth::TOTP {
@@ -107,8 +110,7 @@ impl Handler for App {
                             }
                         }
                     }
-                };
-                Auth::Accept
+                }
             }
         })
     }
@@ -150,11 +152,7 @@ impl Handler for App {
         })
     }
 
-    async fn channel_open_session(
-        &mut self,
-        channel: Channel<Msg>,
-        _: &mut Session,
-    ) -> Result<bool, Self::Error> {
+    async fn channel_open_session(&mut self, channel: Channel<Msg>, _: &mut Session) -> Result<bool, Self::Error> {
         self.channels.lock().await.insert(channel.id(), channel);
         Ok(true)
     }
@@ -180,9 +178,10 @@ impl Handler for App {
         channel: ChannelId,
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
+        info!("Starting shell for user");
         let mut cmd = pty_process::Command::new("bash");
         let pty = Pty::new()?;
-        cmd
+        cmd.uid(99).gid(99)
             .arg0("bash")
             .env("FLAG", "WGCTF{1_l0v3_77h_pr0t0}")
             .spawn(&pty.pts()?)?;
