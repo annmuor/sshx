@@ -65,6 +65,7 @@ fn gen_key() -> String {
     s
 }
 
+const DATE : u64 = 1281618000; // 12 Aug 2010, WOT release
 #[async_trait::async_trait]
 impl Handler for App {
     type Error = anyhow::Error;
@@ -91,7 +92,7 @@ impl Handler for App {
                 comment: "Please enter TOTP value based on this key and known secret".to_string(),
             },
             Some((secret, provided)) => {
-                let right_key = totp_lite::totp_custom::<Sha512>(3600, 10, secret.as_bytes(), 0);
+                let right_key = totp_lite::totp_custom::<Sha512>(3600, 10, secret.as_bytes(), DATE);
                 match right_key.eq(provided) {
                     true => {
                         info!("Accepted TOTP auth for {user}");
