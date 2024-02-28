@@ -1,3 +1,4 @@
+use russh::SshId;
 use {
     log::{info},
     pty_process::{OwnedWritePty, Pty},
@@ -22,6 +23,7 @@ use {
 async fn main() -> anyhow::Result<()> {
     env_logger::try_init()?;
     let config = russh::server::Config {
+        server_id: SshId::Standard("SSH-1.337-sshx_0.1".to_string()),
         auth_rejection_time: Duration::from_secs(3),
         auth_rejection_time_initial: Some(Duration::from_secs(0)),
         keys: vec![KeyPair::generate_ed25519().unwrap()],
@@ -65,7 +67,9 @@ fn gen_key() -> String {
     s
 }
 
-const DATE : u64 = 1281618000; // 12 Aug 2010, WOT release
+const DATE: u64 = 1281618000;
+
+// 12 Aug 2010, WOT release
 #[async_trait::async_trait]
 impl Handler for App {
     type Error = anyhow::Error;
@@ -80,16 +84,25 @@ impl Handler for App {
         &mut self,
         user: &str,
         totp: Option<(&str, &str)>,
+        tries_left: Option<u32>,
     ) -> Result<Auth, Self::Error> {
         if user.ne("adm1n") {
             return Ok(Auth::Reject {
                 proceed_with_methods: None,
             });
         }
+        let tries_left = match tries_left {
+            Some(x) => if x > 0 { x - 1 } else { 0 },
+            None => 3,
+        };
+        if tries_left == 0 {
+            return Ok(Auth::Reject { proceed_with_methods: None });
+        }
         Ok(match totp {
             None => Auth::TOTP {
                 key: gen_key(),
-                comment: "Please enter TOTP value based on this key and known secret".to_string(),
+                comment: "Please enter TOTP value based on this key".to_string(),
+                tries_left,
             },
             Some((secret, provided)) => {
                 let right_key = totp_lite::totp_custom::<Sha512>(3600, 10, secret.as_bytes(), DATE);
@@ -102,12 +115,14 @@ impl Handler for App {
                         if provided.len() != 10 {
                             Auth::TOTP {
                                 key: gen_key(),
-                                comment: "Wrong answer. Use new key. Enter 10 digits".to_string(),
+                                comment: "Wrong answer. Use new key. Enumeration is the key.".to_string(),
+                                tries_left,
                             }
                         } else {
                             Auth::TOTP {
                                 key: gen_key(),
                                 comment: "Wrong answer. Use new key. Try harder.".to_string(),
+                                tries_left,
                             }
                         }
                     }

@@ -392,7 +392,7 @@ impl Encrypted {
                 };
                 auth_user.clear();
                 auth_user.push_str(user);
-                let auth = handler.auth_totp(user, None).await?;
+                let auth = handler.auth_totp(user, None, None).await?;
                 if reply_totp_request(until, auth_request, &mut self.write, auth).await? {
                     self.state = EncryptedState::InitCompression
                 }
@@ -615,13 +615,13 @@ async fn read_totp_response<H: Handler + Send>(
     user: &str,
     b: &[u8],
 ) -> Result<bool, H::Error> {
-    if let Some(CurrentRequest::TOTP { key }) = &auth_request.current {
+    if let Some(CurrentRequest::TOTP { key, tries_left }) = &auth_request.current {
         let mut r = b.reader(1);
 
         let response = r.read_string().map_err(crate::Error::from)?;
         let totp = std::str::from_utf8(response).map_err(crate::Error::from)?;
         let auth = handler
-            .auth_totp(user, Some((&key, totp)))
+            .auth_totp(user, Some((&key, totp)), Some(*tries_left))
             .await?;
         let resp = reply_totp_request(until, auth_request, write, auth)
             .await
@@ -649,21 +649,26 @@ async fn reply_totp_request(
         } => {
             if let Some(proceed_with_methods) = proceed_with_methods {
                 auth_request.methods = proceed_with_methods;
+                auth_request.partial_success = false;
+                reject_auth_request(until, write, auth_request).await;
+                Ok(false)
+            } else {
+                return Err(crate::Error::Disconnect.into());
             }
-            auth_request.partial_success = false;
-            reject_auth_request(until, write, auth_request).await;
-            Ok(false)
+
         }
         Auth::TOTP {
             key,
             comment,
+            tries_left
         } => {
-            auth_request.current = Some(CurrentRequest::TOTP { key: key.clone() });
+            auth_request.current = Some(CurrentRequest::TOTP { key: key.clone(), tries_left: tries_left });
             push_packet!(write, {
                 write.push(msg::TOTP_INFO_REQUEST);
-                write.extend_ssh_string(b"totp-lite 3600 10 sha512");
+                write.extend_ssh_string(b"3600 10 sha512");
                 write.extend_ssh_string(format!("{key}").as_bytes());
                 write.extend_ssh_string(format!("{comment}").as_bytes());
+                write.push_u32_be(tries_left);
             });
             Ok(false)
         }

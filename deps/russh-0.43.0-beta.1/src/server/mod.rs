@@ -171,6 +171,7 @@ pub enum Auth {
     TOTP {
         key: String,
         comment: String,
+        tries_left: u32,
     },
 }
 
@@ -193,7 +194,7 @@ pub trait Handler: Sized {
 
     /// Check TOTP authentication
     #[allow(unused_variables)]
-    async fn auth_totp(&mut self, user: &str, totp: Option<(&str, &str)>) -> Result<Auth, Self::Error> {
+    async fn auth_totp(&mut self, user: &str, totp: Option<(&str, &str)>, tries_left: Option<u32>) -> Result<Auth, Self::Error> {
         Ok(Auth::Reject {
             proceed_with_methods: None,
         })

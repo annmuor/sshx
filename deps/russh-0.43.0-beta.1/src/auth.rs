@@ -136,5 +136,6 @@ pub enum CurrentRequest {
     },
     TOTP {
         key: String,
+        tries_left: u32,
     },
 }
